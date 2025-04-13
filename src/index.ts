@@ -34,10 +34,45 @@ async function findOrCreateFarconGroup(client: Client): Promise<Group> {
   }
 
   console.log("Creating new Farcon group...");
-  const group = await client.conversations.newGroup([], {
-    groupName: GROUP_NAME,
-    groupDescription: "The Farcon community group",
-  });
+  
+  // Check if addresses are enabled on XMTP
+  const addresses = [
+    "0x80245b9C0d2Ef322F2554922cA86Cf211a24047F",
+  ].map(addr => ({
+    identifier: addr,
+    identifierKind: IdentifierKind.Ethereum
+  }));
+  
+  console.log("Checking addresses:", addresses);
+  const canMessage = await client.canMessage(addresses);
+  console.log("canMessage result:", canMessage);
+  
+  const enabledAddresses = addresses.filter((addr) => canMessage.get(addr.identifier));
+  console.log("Enabled addresses:", enabledAddresses);
+  
+  // Get inboxIds for enabled addresses
+  const inboxIds = await Promise.all(
+    enabledAddresses.map(async (addr) => {
+      console.log("Getting inbox state for:", addr.identifier);
+      const state = await client.preferences.inboxStateFromInboxIds([addr.identifier]);
+      console.log("Inbox state:", state);
+      return state[0].inboxId;
+    })
+  );
+
+  if (inboxIds.length === 0) {
+    throw new Error("No addresses are enabled on XMTP. Members need to create an XMTP identity first.");
+  }
+
+  console.log("Enabled addresses:", enabledAddresses);
+  
+  const group = await client.conversations.newGroup(
+    inboxIds,
+    {
+      groupName: GROUP_NAME,
+      groupDescription: "The Farcon community group",
+    }
+  );
 
   // Add admin to group
   await group.addMembersByIdentifiers([{
