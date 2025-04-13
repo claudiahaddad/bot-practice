@@ -1,0 +1,155 @@
+import { Client, type XmtpEnv, IdentifierKind, type Group } from "@xmtp/node-sdk";
+import { createSigner, getEncryptionKeyFromHex } from "./helpers/client.js";
+import { logAgentDetails, validateEnvironment } from "./helpers/utils.js";
+
+const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV } = validateEnvironment([
+  "WALLET_KEY",
+  "ENCRYPTION_KEY",
+  "XMTP_ENV",
+]);
+
+// Configuration
+const GROUP_NAME = "Farcon";
+const ADMIN_ENS = "claudiatest.base.eth";
+
+async function findOrCreateFarconGroup(client: Client): Promise<Group> {
+  console.log("Looking for existing Farcon group...");
+  await client.conversations.sync();
+  
+  const conversations = await client.conversations.list();
+  const existingGroup = conversations.find((conv: { isGroup: boolean; name: string }) => {
+    return conv.isGroup && conv.name === GROUP_NAME;
+  }) as Group | undefined;
+
+  if (existingGroup) {
+    console.log("Found existing Farcon group");
+    return existingGroup;
+  }
+
+  console.log("Creating new Farcon group...");
+  const group = await client.conversations.newGroup([], {
+    groupName: GROUP_NAME,
+    groupDescription: "The Farcon community group",
+  });
+
+  // Add claudiatest.base.eth as admin
+  await group.addMembersByIdentifiers([{
+    identifier: ADMIN_ENS,
+    identifierKind: IdentifierKind.Ethereum,
+  }]);
+  
+  const adminMember = (await group.members()).find((member: { 
+    accountIdentifiers: Array<{
+      identifierKind: number;
+      identifier: string;
+    }>;
+    inboxId: string;
+  }) => 
+    member.accountIdentifiers.some((id) => 
+      id.identifierKind === IdentifierKind.Ethereum && 
+      id.identifier.toLowerCase() === ADMIN_ENS.toLowerCase()
+    )
+  );
+
+  if (adminMember) {
+    await group.addAdmin(adminMember.inboxId);
+    console.log(`Added ${ADMIN_ENS} as admin`);
+  }
+
+  console.log("Farcon group created successfully");
+  return group;
+}
+
+async function main() {
+  const signer = createSigner(WALLET_KEY);
+  const encryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
+  
+  const client = await Client.create(signer, encryptionKey, {
+    env: XMTP_ENV as XmtpEnv,
+  });
+
+  const identifier = await signer.getIdentifier();
+  const address = identifier.identifier;
+  
+  logAgentDetails(address, client.inboxId, XMTP_ENV);
+
+  // Get or create the Farcon group
+  const farconGroup = await findOrCreateFarconGroup(client);
+
+  console.log("✓ Syncing conversations...");
+  await client.conversations.sync();
+
+  console.log("✓ Listening for messages...");
+  const stream = await client.conversations.streamAllMessages();
+
+  for await (const message of stream) {
+    if (
+      message?.senderInboxId.toLowerCase() === client.inboxId.toLowerCase() ||
+      message?.contentType?.typeId !== "text"
+    ) {
+      continue;
+    }
+
+    try {
+      const senderInboxId = message.senderInboxId;
+      
+      // Get the conversation to reply to the sender
+      const conversation = await client.conversations.getConversationById(
+        message.conversationId
+      );
+
+      if (!conversation) {
+        console.log("Could not find the conversation for the message");
+        continue;
+      }
+
+      // Check if sender is already in the group
+      const members = await farconGroup.members();
+      const isMember = members.some((member: { inboxId: string }) => 
+        member.inboxId.toLowerCase() === senderInboxId.toLowerCase()
+      );
+
+      if (!isMember) {
+        console.log(`Adding new member ${senderInboxId} to Farcon group...`);
+        await farconGroup.addMembers([senderInboxId]);
+        
+        const welcomeMessage = `Welcome to the Farcon group! You've been added because you messaged our agent.`;
+        await farconGroup.send(welcomeMessage);
+        
+        await conversation.send(
+          `I've added you to the Farcon group. Check your conversations to find it!`
+        );
+        
+        console.log(`✓ Added ${senderInboxId} to Farcon group`);
+      } else {
+        await conversation.send(
+          `You're already a member of the Farcon group!`
+        );
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Error processing message:", errorMessage);
+      
+      try {
+        const conversation = await client.conversations.getConversationById(
+          message.conversationId
+        );
+        if (conversation) {
+          await conversation.send(
+            "Sorry, I encountered an error processing your message."
+          );
+        }
+      } catch (sendError) {
+        console.error(
+          "Failed to send error message:",
+          sendError instanceof Error ? sendError.message : String(sendError)
+        );
+      }
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+}); 
