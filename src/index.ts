@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { Client, type XmtpEnv, IdentifierKind, type Group } from "@xmtp/node-sdk";
 import { createSigner, getEncryptionKeyFromHex } from "./helpers/client.js";
 import { logAgentDetails, validateEnvironment } from "./helpers/utils.js";
@@ -10,15 +13,19 @@ const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV } = validateEnvironment([
 
 // Configuration
 const GROUP_NAME = "Farcon";
-const ADMIN_ENS = "claudiatest.base.eth";
+const ADMIN_ADDRESS = "0x80245b9C0d2Ef322F2554922cA86Cf211a24047F";
 
 async function findOrCreateFarconGroup(client: Client): Promise<Group> {
   console.log("Looking for existing Farcon group...");
   await client.conversations.sync();
   
   const conversations = await client.conversations.list();
-  const existingGroup = conversations.find((conv: { isGroup: boolean; name: string }) => {
-    return conv.isGroup && conv.name === GROUP_NAME;
+  const existingGroup = conversations.find((conv): conv is Group => {
+    return Boolean('isGroup' in conv && 
+      (conv as any).isGroup && 
+      'name' in conv && 
+      (conv as any).name === GROUP_NAME
+    );
   }) as Group | undefined;
 
   if (existingGroup) {
@@ -32,9 +39,9 @@ async function findOrCreateFarconGroup(client: Client): Promise<Group> {
     groupDescription: "The Farcon community group",
   });
 
-  // Add claudiatest.base.eth as admin
+  // Add admin to group
   await group.addMembersByIdentifiers([{
-    identifier: ADMIN_ENS,
+    identifier: ADMIN_ADDRESS,
     identifierKind: IdentifierKind.Ethereum,
   }]);
   
@@ -47,13 +54,13 @@ async function findOrCreateFarconGroup(client: Client): Promise<Group> {
   }) => 
     member.accountIdentifiers.some((id) => 
       id.identifierKind === IdentifierKind.Ethereum && 
-      id.identifier.toLowerCase() === ADMIN_ENS.toLowerCase()
+      id.identifier.toLowerCase() === ADMIN_ADDRESS.toLowerCase()
     )
   );
 
   if (adminMember) {
     await group.addAdmin(adminMember.inboxId);
-    console.log(`Added ${ADMIN_ENS} as admin`);
+    console.log(`Added ${ADMIN_ADDRESS} as admin`);
   }
 
   console.log("Farcon group created successfully");
@@ -61,7 +68,7 @@ async function findOrCreateFarconGroup(client: Client): Promise<Group> {
 }
 
 async function main() {
-  const signer = createSigner(WALLET_KEY);
+  const signer = createSigner(WALLET_KEY as `0x${string}`);
   const encryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
   
   const client = await Client.create(signer, encryptionKey, {

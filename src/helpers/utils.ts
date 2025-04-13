@@ -1,4 +1,5 @@
-import type { ProcessEnv } from 'node:process';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export function validateEnvironment(requiredEnvVars: string[]) {
   const missingEnvVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);

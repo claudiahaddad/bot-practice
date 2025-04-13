@@ -11,14 +11,15 @@
         "start": "tsx src/index.ts"
     },
     "dependencies": {
-        "@xmtp/node-sdk": "1.1.1",
+        "@xmtp/node-sdk": "1.2.0",
         "dotenv": "^16.5.0",
-        "uint8arrays": "^2.1.11",
-        "viem": "1.19.11"
+        "ethers": "^6.13.5",
+        "uint8arrays": "^5.1.0",
+        "viem": "^2.26.3"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",
-        "tsx": "^4.19.3",
+        "tsx": "^4.7.0",
         "typescript": "^5.7.3"
     },
     "engines": {
