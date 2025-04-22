@@ -2,15 +2,11 @@ import { IdentifierKind, type Signer } from "@xmtp/node-sdk";
 import { fromString } from "uint8arrays";
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
+import { base } from "viem/chains";
 
 export const createSigner = (key: `0x${string}`): Signer => {
   const account = privateKeyToAccount(key);
-  const wallet = createWalletClient({
-    account,
-    chain: sepolia,
-    transport: http(),
-  });
+  const wallet = createWalletClient({ account, chain: base, transport: http() });
 
   return {
     type: "EOA",
