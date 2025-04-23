@@ -16,8 +16,9 @@ const { WALLET_KEY, ENCRYPTION_KEY, XMTP_ENV } = validateEnvironment([
 async function main() {
   const signer = createSigner(WALLET_KEY as `0x${string}`);
   const encryptionKey = getEncryptionKeyFromHex(ENCRYPTION_KEY);
-  const client = await Client.create(signer, encryptionKey, {
+  const client = await Client.create(signer, {
     env: XMTP_ENV as XmtpEnv,
+    dbEncryptionKey: encryptionKey,
   });
   const identifier = await signer.getIdentifier();
   const address = identifier.identifier;
